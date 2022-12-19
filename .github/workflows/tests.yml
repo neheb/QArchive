@@ -9,8 +9,8 @@ on:
       - master
 
 env:
-  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
-  BUILD_TYPE: Release
+  # Customize the Meson build type here (release, debug, etc...)
+  BUILD_TYPE: release
 
 jobs:
   ubuntu:
@@ -21,47 +21,28 @@ jobs:
       matrix:
         ubuntu_version: [20.04, 22.04]
         qt_version: [5.12.12, 5.15.2, 6.4.0]
-        shared: [ON, OFF]
+        shared: ["static", "shared"]
 
     steps:
     - name: Checkout
       uses: actions/checkout@v3
-                
+
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
           version: ${{ matrix.qt_version }}
           cache: 'true'
           cache-key-prefix: ${{ runner.os }}-Qt-Cache-${{ matrix.qt_version }}
-          dir: ${{ github.workspace }}/Qt    
+          dir: ${{ github.workspace }}/Qt
 
-    - name: Install LibArchive
-      run: |
-          mkdir build
-          cd build
-          git clone https://github.com/libarchive/libarchive
-          cd libarchive
-          git checkout "v3.5.1"
-          cmake -DCMAKE_BUILD_TYPE="${{env.BUILD_TYPE}}" .
-          cmake --build . --config ${{env.BUILD_TYPE}}
-          sudo make install
-          cd ..
-          rm -rf libarchive
-          cd ..
-          sudo cp -fp /usr/local/lib/pkgconfig/libarchive.pc /usr/lib/pkgconfig/libarchive.pc
-          sudo cp -fp /usr/local/lib/libarchive.* /usr/lib/
-
-          
-
-    - name: Configure CMake
-      run: cmake -DCMAKE_BUILD_TYPE="${{env.BUILD_TYPE}}" -DBUILD_SHARED_LIBS=${{ matrix.shared }} -DBUILD_TESTS=ON -B "${{github.workspace}}/build"
+    - name: Configure Meson
+      run: meson setup "${{github.workspace}}/build" -Dbuildtype="${{env.BUILD_TYPE}}" -Ddefault_library=${{ matrix.shared }}
 
     - name: Build
-      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+      run: meson compile -C "${{github.workspace}}/build"
 
     - name: Run tests
-      working-directory: ${{github.workspace}}/build/tests
-      run: "ctest --verbose"
+      run: meson test -C "${{github.workspace}}/build"
 
   macos:
     runs-on: macos-${{ matrix.macos_version }}
@@ -71,7 +52,7 @@ jobs:
       matrix:
         macos_version: [10.15,12]
         qt_version: [5.15.2, 6.4.0]
-        shared: [ON, OFF]
+        shared: ["static", "shared"]
 
     steps:
       - name: Checkout
@@ -85,21 +66,11 @@ jobs:
             cache-key-prefix: ${{ runner.os }}-Qt-Cache-${{ matrix.qt_version }}
             dir: ${{ github.workspace }}/Qt
 
-      - name: Install LibArchive
-        run: brew install libarchive
+      - name: Configure Meson
+        run: meson setup "${{github.workspace}}/build" -Dbuildtype="${{env.BUILD_TYPE}}" -DDefault_library=${{ matrix.shared }}
 
-      - name: Configure CMake
-        if: ${{ matrix.macos_version }} == '10'
-        run: cmake -DCMAKE_BUILD_TYPE="${{env.BUILD_TYPE}}" -DLIBARCHIVE_PKG_CONFIG=$(brew --prefix libarchive)/lib/pkgconfig/libarchive.pc -DBUILD_SHARED_LIBS=${{ matrix.shared }} -DBUILD_TESTS=ON -B "${{github.workspace}}/build"
-   
-
-      - name: Configure CMake
-        if: ${{ matrix.macos_version }} == '12'
-        run: cmake -DCMAKE_BUILD_TYPE="${{env.BUILD_TYPE}}" -DLibArchive_INCLUDE_DIR=$(brew --prefix libarchive)/include -DBUILD_SHARED_LIBS=${{ matrix.shared }} -DBUILD_TESTS=ON -B "${{github.workspace}}/build"
-        
       - name: Build
-        run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+        run: meson compile -C "${{github.workspace}}/build"
 
       - name: Run tests
-        working-directory: ${{github.workspace}}/build/tests
-        run: "ctest --verbose"
+        run: meson test -C "${{github.workspace}}/build"
